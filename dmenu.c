@@ -104,6 +104,9 @@ struct item {
 	#if PRINTINDEX_PATCH
 	int index;
 	#endif // PRINTINDEX_PATCH
+	#if PNG_IMAGES_PATCH
+	int size;
+	#endif // PNG_IMAGES_PATCH
 };
 
 static char text[BUFSIZ] = "";
@@ -126,6 +129,11 @@ static int inputw = 0, promptw;
 static int passwd = 0;
 #endif // PASSWORD_PATCH
 static int lrpad; /* sum of left and right padding */
+#if PNG_IMAGES_PATCH
+static int tbpad; /* sum of top and bottom padding for images */
+static char *image_prefix = "PNG_IMAGE:";
+static int image_size = -1; /* in pixels */
+#endif // PNG_IMAGES_PATCH
 #if BARPADDING_PATCH
 static int vp; /* vertical padding for bar */
 static int sp; /* side padding for bar */
@@ -184,12 +192,41 @@ static Clr *scheme[SchemeLast];
 
 #include "config.h"
 
+#if PNG_IMAGES_PATCH
+static unsigned int
+textw_maxclamp(const char *str, unsigned int n, unsigned int maxw, unsigned int maxh)
+{
+	unsigned int w;
+	if (startswith(image_prefix, str) &&
+			(w = drw_getimagewidth_clamp(drw, str + strlen(image_prefix), maxw, maxh)))
+		return MIN(w + lrpad, n);
+	w = drw_fontset_getwidth_clamp(drw, str, n) + lrpad;
+	return MIN(w, n);
+}
+
+static unsigned int
+texth_maxclamp(const char *str, unsigned int n, unsigned int maxw, unsigned int maxh)
+{
+	unsigned int h;
+	if (startswith(image_prefix, str) &&
+			(h = drw_getimageheight_clamp(drw, str + strlen(image_prefix), maxw, maxh)))
+		return MIN(h + tbpad, n);
+	return MIN(bh, n);
+}
+
+static unsigned int
+textw_clamp(const char *str, unsigned int n)
+{
+	return textw_maxclamp(str, n, mw, bh);
+}
+#else
 static unsigned int
 textw_clamp(const char *str, unsigned int n)
 {
 	unsigned int w = drw_fontset_getwidth_clamp(drw, str, n) + lrpad;
 	return MIN(w, n);
 }
+#endif // PNG_IMAGES_PATCH
 
 static void appenditem(struct item *item, struct item **list, struct item **last);
 static void calcoffsets(void);
@@ -243,10 +280,12 @@ calcoffsets(void)
 
 	if (lines > 0) {
 		#if GRID_PATCH
-		if (columns)
+		if (columns) {
 			n = lines * columns * bh;
-		else
-			n = lines * bh;
+		} else
+		#endif // GRID_PATCH
+		#if PNG_IMAGES_PATCH
+		n = mh - bh;
 		#else
 		n = lines * bh;
 		#endif // GRID_PATCH
@@ -261,12 +300,29 @@ calcoffsets(void)
 		#endif // SYMBOLS_PATCH
 	}
 	/* calculate which items will begin the next page and previous page */
-	for (i = 0, next = curr; next; next = next->right)
+	for (i = 0, next = curr; next; next = next->right) {
+		#if PNG_IMAGES_PATCH
+		if ((i += (lines > 0)
+				? texth_maxclamp(next->text, n, mw - lrpad, image_size)
+				: textw_maxclamp(next->text, n, image_size, bh)) > n)
+			break;
+		#else
 		if ((i += (lines > 0) ? bh : textw_clamp(next->text, n)) > n)
 			break;
-	for (i = 0, prev = curr; prev && prev->left; prev = prev->left)
+		#endif // PNG_IMAGES_PATCH
+	}
+
+	for (i = 0, prev = curr; prev && prev->left; prev = prev->left) {
+		#if PNG_IMAGES_PATCH
+		if ((i += (lines > 0)
+				? texth_maxclamp(prev->left->text, n, mw - lrpad, image_size)
+				: textw_maxclamp(prev->left->text, n, image_size, bh)) > n)
+			break;
+		#else
 		if ((i += (lines > 0) ? bh : textw_clamp(prev->left->text, n)) > n)
 			break;
+		#endif // PNG_IMAGES_PATCH
+	}
 }
 
 static void
@@ -460,6 +516,21 @@ drawitem(struct item *item, int x, int y, int w)
 	else
 		drw_setscheme(drw, scheme[SchemeNorm]);
 
+	#if PNG_IMAGES_PATCH
+	int vertical = lines > 0;
+	if (startswith(image_prefix, item->text)) {
+		char *path = item->text + strlen(image_prefix);
+		unsigned int image_width = vertical ? w - lrpad : image_size;
+		unsigned int image_height = vertical ? image_size : bh;
+		drw_image(drw, &x, &y, &image_width, &image_height,
+		          lrpad, vertical ? tbpad : 0, path, vertical);
+		if (image_width && image_height) {
+			item->size = (vertical ? image_height + tbpad: image_width + lrpad);
+			return vertical ? y : x;
+		}
+	}
+	item->size = (vertical ? bh : w);
+	#endif // PNG_IMAGES_PATCH
 	r = drw_text(drw
 		#if EMOJI_HIGHLIGHT_PATCH
 		, x + ((iscomment == 6) ? temppadding : 0)
@@ -491,7 +562,7 @@ drawitem(struct item *item, int x, int y, int w)
 	drawhighlights(item, x, y, w);
 	#endif // EMOJI_HIGHLIGHT_PATCH
 	#endif // HIGHLIGHT_PATCH
-	return r;
+	return (lines > 0 ? y + bh : r);
 }
 
 static void
@@ -671,6 +742,7 @@ drawmenu(void)
 
 		#if GRID_PATCH
 		/* draw grid */
+		y += bh;
 		for (item = curr; item != next; item = item->right, i++) {
 			if (columns) {
 				#if VERTFULL_PATCH
@@ -690,9 +762,9 @@ drawmenu(void)
 				#endif // VERTFULL_PATCH
 			} else {
 				#if VERTFULL_PATCH
-				drawitem(item, 0, y += bh, mw);
+				y = drawitem(item, 0, y, mw);
 				#else
-				drawitem(item, x, y += bh, mw - x);
+				y = drawitem(item, x, y, mw - x);
 				#endif // VERTFULL_PATCH
 			}
 		}
@@ -704,16 +776,17 @@ drawmenu(void)
 		}
 		#endif // DYNAMIC_HEIGHT_PATCH
 
-		#else
+		#else // !GRID_PATCH
 		/* draw vertical list */
+		y += bh;
 		for (item = curr; item != next; item = item->right) {
 			#if DYNAMIC_HEIGHT_PATCH
 			i++;
 			#endif // DYNAMIC_HEIGHT_PATCH
 			#if VERTFULL_PATCH
-			drawitem(item, 0, y += bh, mw);
+			y = drawitem(item, 0, y, mw);
 			#else
-			drawitem(item, x, y += bh, mw - x);
+			y = drawitem(item, x, y, mw - x);
 			#endif // VERTFULL_PATCH
 		}
 		#if DYNAMIC_HEIGHT_PATCH
@@ -730,11 +803,13 @@ drawmenu(void)
 		#endif // SYMBOLS_PATCH
 		if (curr->left) {
 			drw_setscheme(drw, scheme[SchemeNorm]);
-			#if SYMBOLS_PATCH
-			drw_text(drw, x, 0, w, bh, lrpad / 2, symbol_1, 0
-			#else
-			drw_text(drw, x, 0, w, bh, lrpad / 2, "<", 0
-			#endif // SYMBOLS_PATCH
+			drw_text(drw, x, 0, w, bh, lrpad / 2
+				#if SYMBOLS_PATCH
+				, symbol_1
+				#else
+				, "<"
+				#endif // SYMBOLS_PATCH
+				, 0
 				#if PANGO_PATCH
 				, True
 				#endif // PANGO_PATCH
@@ -867,7 +942,6 @@ match(void)
 	#if NON_BLOCKING_STDIN_PATCH
 	int preserve = 0;
 	#endif // NON_BLOCKING_STDIN_PATCH
-
 	strcpy(buf, text);
 	/* separate input text into tokens to be matched individually */
 	for (s = strtok(buf, " "); s; tokv[tokc - 1] = s, s = strtok(NULL, " "))
@@ -1705,6 +1779,7 @@ setup(void)
 {
 	int x, y, i, j;
 	unsigned int du;
+
 	#if RELATIVE_INPUT_WIDTH_PATCH
 	unsigned int tmp, minstrlen = 0, curstrlen = 0;
 	int numwidthchecks = 100;
@@ -1754,7 +1829,16 @@ setup(void)
 	bh = MAX(bh,lineheight);	/* make a menu line AT LEAST 'lineheight' tall */
 	#endif // LINE_HEIGHT_PATCH
 	lines = MAX(lines, 0);
+
+	#if PNG_IMAGES_PATCH
+	/* default values for image_size */
+	if (image_size < 0)
+		image_size = (lines > 0) ? 2 * bh : 8 * bh;
+	mh = bh + ((lines > 0) ? MAX(lines * bh, image_size) : 0);
+	#else
 	mh = (lines + 1) * bh;
+	#endif // PNG_IMAGES_PATCH
+
 	#if CENTER_PATCH && PANGO_PATCH
 	promptw = (prompt && *prompt) ? TEXTWM(prompt) - lrpad / 4 : 0;
 	#elif CENTER_PATCH
@@ -2070,6 +2154,9 @@ usage(void)
 		#if SEPARATOR_PATCH
 		"\n             [-d separator] [-D separator]"
 		#endif // SEPARATOR_PATCH
+		#if PNG_IMAGES_PATCH
+		"\n             [-ip image_prefix] [-is image_size]"
+		#endif // PNG_IMAGES_PATCH
 		"\n");
 }
 
@@ -2325,6 +2412,12 @@ main(int argc, char *argv[])
 			insert(text, strlen(text));
 		}
 		#endif // INITIALTEXT_PATCH
+		#if PNG_IMAGES_PATCH
+		else if (!strcmp(argv[i], "-ip"))  /* image prefix */
+			image_prefix = argv[++i];
+		else if (!strcmp(argv[i], "-is"))  /* max. image preview size (height or width) */
+			image_size = atoi(argv[++i]);
+		#endif // PNG_IMAGES_PATCH
 		else {
 			usage();
 		}
@@ -2376,6 +2469,10 @@ main(int argc, char *argv[])
 	#else
 	lrpad = drw->fonts->h;
 	#endif // PANGO_PATCH
+
+	#if PNG_IMAGES_PATCH
+	tbpad = lrpad / 2;
+	#endif // PNG_IMAGES_PATCH
 
 	#if BARPADDING_PATCH
 	sp = sidepad;

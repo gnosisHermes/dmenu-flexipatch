@@ -5,7 +5,7 @@ buttonpress(XEvent *e)
 	XButtonPressedEvent *ev = &e->xbutton;
 	int x = 0, y = 0, h = bh, w;
 	#if GRID_PATCH
-	int i, cols;
+	int i;
 	#endif // GRID_PATCH
 
 	if (ev->window != win) {
@@ -75,29 +75,42 @@ buttonpress(XEvent *e)
 	if (ev->state & ShiftMask)
 		return;
 	if (lines > 0) {
+		y += bh;
 		#if GRID_PATCH
-		cols = columns ? columns : 1;
-		for (i = 0, item = curr; item != next; item = item->right, i++) {
-			if (
-				(ev->y >= y + ((i % lines) + 1) * bh) && // line y start
-				(ev->y <= y + ((i % lines) + 2) * bh) && // line y end
-				(ev->x >= x + ((i / lines) * (w / cols))) && // column x start
-				(ev->x <= x + ((i / lines + 1) * (w / cols))) // column x end
-			) {
-				clickitem(item, ev);
-				return;
+		if (columns) {
+			for (i = 0, item = curr; item != next; item = item->right, i++) {
+				if (
+					(ev->y >= y + ((i % lines) + 1) * bh) && // line y start
+					(ev->y <= y + ((i % lines) + 2) * bh) && // line y end
+					(ev->x >= x + ((i / lines) * (w / columns))) && // column x start
+					(ev->x <= x + ((i / lines + 1) * (w / columns))) // column x end
+				) {
+					clickitem(item, ev);
+					return;
+				}
 			}
-		}
-		#else
-		/* vertical list: (ctrl)left-click on item */
-		for (item = curr; item != next; item = item->right) {
-			y += h;
-			if (ev->y >= y && ev->y <= (y + h)) {
-				clickitem(item, ev);
-				return;
-			}
+			return;
 		}
 		#endif // GRID_PATCH
+
+		/* vertical list: (ctrl)left-click on item */
+		for (item = curr; item != next; item = item->right) {
+			#if PNG_IMAGES_PATCH
+			if (ev->y >= y && ev->y <= (y + item->size))
+			#else
+			if (ev->y >= y && ev->y <= (y + h))
+			#endif // PNG_IMAGES_PATCH
+			{
+				clickitem(item, ev);
+				return;
+			}
+			#if PNG_IMAGES_PATCH
+			y += item->size;
+			#else
+			y += h;
+			#endif // PNG_IMAGES_PATCH
+		}
+
 	} else if (matches) {
 		/* left-click on left arrow */
 		x += inputw;
@@ -117,11 +130,15 @@ buttonpress(XEvent *e)
 		/* horizontal list: (ctrl)left-click on item */
 		for (item = curr; item != next; item = item->right) {
 			x += w;
-			#if SYMBOLS_PATCH
+			#if PNG_IMAGES_PATCH && SYMBOLS_PATCH
+			w = MIN(item->size, mw - x - TEXTW(symbol_2));
+			#elif PNG_IMAGES_PATCH
+			w = MIN(item->size, mw - x - TEXTW(">"));
+			#elif SYMBOLS_PATCH
 			w = MIN(TEXTW(item->text), mw - x - TEXTW(symbol_2));
 			#else
 			w = MIN(TEXTW(item->text), mw - x - TEXTW(">"));
-			#endif // SYMBOLS_PATCH
+			#endif // SYMBOLS_PATCH | PNG_IMAGES_PATCH
 			if (ev->x >= x && ev->x <= x + w) {
 				clickitem(item, ev);
 				return;
@@ -224,7 +241,7 @@ motionevent(XButtonEvent *ev)
 	struct item *item;
 	int x = 0, y = 0, w;
 	#if GRID_PATCH
-	int i, cols;
+	int i;
 	#endif // GRID_PATCH
 
 	if (ev->window != win || matches == 0)
@@ -236,35 +253,47 @@ motionevent(XButtonEvent *ev)
 	if (lines > 0) {
 		/* input field */
 		w = mw - x;
+		y += bh;
 		#if GRID_PATCH
-		cols = columns ? columns : 1;
-		/* grid view or vertical list */
-		for (i = 0, item = curr; item != next; item = item->right, i++) {
-			if (
-				(ev->y >= y + ((i % lines) + 1) * bh) && // line y start
-				(ev->y <= y + ((i % lines) + 2) * bh) && // line y end
-				(ev->x >= x + ((i / lines) * (w / cols))) && // column x start
-				(ev->x <= x + ((i / lines + 1) * (w / cols))) // column x end
-			) {
-				sel = item;
-				calcoffsets();
-				drawmenu();
-				break;
+		if (columns) {
+			/* grid view */
+			for (i = 0, item = curr; item != next; item = item->right, i++) {
+				if (
+					(ev->y >= y + ((i % lines) + 1) * bh) && // line y start
+					(ev->y <= y + ((i % lines) + 2) * bh) && // line y end
+					(ev->x >= x + ((i / lines) * (w / columns))) && // column x start
+					(ev->x <= x + ((i / lines + 1) * (w / columns))) // column x end
+				) {
+					sel = item;
+					calcoffsets();
+					drawmenu();
+					break;
+				}
 			}
+			return;
 		}
-		#else
+		#endif // GRID_PATCH
+
 		/* vertical list */
 		w = mw - x;
 		for (item = curr; item != next; item = item->right) {
-			y += bh;
-			if (ev->y >= y && ev->y <= (y + bh)) {
+			#if PNG_IMAGES_PATCH
+			if (ev->y >= y && ev->y <= (y + item->size))
+			#else
+			if (ev->y >= y && ev->y <= (y + bh))
+			#endif // PNG_IMAGES_PATCH
+			{
 				sel = item;
 				calcoffsets();
 				drawmenu();
 				break;
 			}
+			#if PNG_IMAGES_PATCH
+			y += item->size;
+			#else
+			y += bh;
+			#endif // PNG_IMAGES_PATCH
 		}
-		#endif // GRID_PATCH
 		return;
 	}
 
@@ -278,11 +307,15 @@ motionevent(XButtonEvent *ev)
 	/* horizontal list */
 	for (item = curr; item != next; item = item->right) {
 		x += w;
-		#if SYMBOLS_PATCH
+		#if PNG_IMAGES_PATCH && SYMBOLS_PATCH
+		w = MIN(item->size, mw - x - TEXTW(symbol_2));
+		#elif PNG_IMAGES_PATCH
+		w = MIN(item->size, mw - x - TEXTW(">"));
+		#elif SYMBOLS_PATCH
 		w = MIN(TEXTW(item->text), mw - x - TEXTW(symbol_2));
 		#else
 		w = MIN(TEXTW(item->text), mw - x - TEXTW(">"));
-		#endif // SYMBOLS_PATCH
+		#endif // SYMBOLS_PATCH | PNG_IMAGES_PATCH
 		if (ev->x >= x && ev->x <= x + w) {
 			sel = item;
 			calcoffsets();

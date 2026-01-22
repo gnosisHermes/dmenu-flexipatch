@@ -34,3 +34,9 @@ ecalloc(size_t nmemb, size_t size)
 		die("calloc:");
 	return p;
 }
+
+int
+startswith(const char* prefix, const char* str)
+{
+	return strncmp(prefix, str, strlen(prefix)) == 0;
+}

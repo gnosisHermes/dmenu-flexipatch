@@ -269,6 +269,11 @@
  */
 #define PLAIN_PROMPT_PATCH 0
 
+/* Allows for previews of PNG images in dmenu.
+ * https://tools.suckless.org/dmenu/patches/png_images/
+ */
+#define PNG_IMAGES_PATCH 0
+
 /* This patch changes the behaviour of matched items and the Tab key to allow tab completion.
  * https://tools.suckless.org/dmenu/patches/prefix-completion/
  */

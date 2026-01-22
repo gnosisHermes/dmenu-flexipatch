@@ -28,6 +28,8 @@ Browsing patches? There is a [map of patches](https://coggle.it/diagram/YjT2DD6j
 
 ### Changelog:
 
+2026-01-22 - Added the PNG images patch
+
 2025-11-29 - Added the bidi patch
 
 2025-10-16 - Added the dynamic height and quiet patches
@@ -222,6 +224,9 @@ Browsing patches? There is a [map of patches](https://coggle.it/diagram/YjT2DD6j
    - [plain-prompt](https://tools.suckless.org/dmenu/patches/listfullwidth/)
       - simple change that avoids colors for the prompt by making it use the same style as the
         rest of the input field
+
+   - [png_images](https://tools.suckless.org/dmenu/patches/png_images/)
+      - adds support for preview of PNG images within dmenu
 
    - [prefix-completion](https://tools.suckless.org/dmenu/patches/prefix-completion/)
       - changes the behaviour of matched items and the Tab key to allow tab completion

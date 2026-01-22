@@ -33,9 +33,12 @@ FREETYPEINC = /usr/include/freetype2
 #PANGOINC = `pkg-config --cflags xft pango pangoxft`
 #PANGOLIB = `pkg-config --libs xft pango pangoxft`
 
+# Uncomment for the PNG images patch / PNG_IMAGES_PATCH
+PNGLIB = `pkg-config --libs spng`
+
 # includes and libs
 INCS = -I$(X11INC) -I$(FREETYPEINC) $(PANGOINC) $(BIDIINC)
-LIBS = -L$(X11LIB) -lX11 $(XINERAMALIBS) $(FREETYPELIBS) -lm $(XRENDER) $(PANGOLIB) $(BIDILIBS)
+LIBS = -L$(X11LIB) -lX11 $(XINERAMALIBS) $(FREETYPELIBS) -lm $(XRENDER) $(PANGOLIB) $(BIDILIBS) $(PNGLIB)
 
 # flags
 CPPFLAGS = -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=200809L -DVERSION=\"$(VERSION)\" $(XINERAMAFLAGS) $(EXTRAFLAGS)
